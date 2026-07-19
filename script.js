@@ -80,6 +80,20 @@ function fbTrack(event, params = {}, options = {}) {
   fbq('track', event, params, { eventID: eventId });
   return eventId;
 }
+const TIKTOK_PRODUCT = window.VM_TIKTOK_PRODUCT || Object.freeze({
+  content_type: 'product',
+  content_ids: ['violet-motion-001'],
+  content_name: 'Violet Motion Sneakers',
+  description: 'Violet Motion women sneakers',
+  quantity: 1,
+  price: 690,
+  value: 690,
+  currency: 'UAH',
+});
+
+function ttProductParams(extra = {}) {
+  return { ...TIKTOK_PRODUCT, ...extra };
+}
 function ttTrack(event, params = {}) {
   if (window.ttq && typeof window.ttq.track === 'function') window.ttq.track(event, params);
 }
@@ -278,6 +292,15 @@ function setSelectedSize(size, track = false) {
 
 sizeBtns.forEach(b => {
   b.addEventListener('click', () => setSelectedSize(b.dataset.size, true));
+});
+
+let tiktokAddToCartTracked = false;
+document.querySelectorAll('a[href="#order"]').forEach(link => {
+  link.addEventListener('click', () => {
+    if (tiktokAddToCartTracked) return;
+    tiktokAddToCartTracked = true;
+    ttTrack('AddToCart', ttProductParams());
+  });
 });
 
 setSelectedSize(selectedSizeInput.value || '38');
@@ -527,6 +550,13 @@ let successOrderSending  = false;
 let pendingManualOrderId = null;
 let instantOrderSent     = false;
 let pendingOrderKey      = '';
+let tiktokPurchaseTracked = false;
+
+function trackTikTokPurchase(orderId) {
+  if (tiktokPurchaseTracked) return;
+  tiktokPurchaseTracked = true;
+  ttTrack('Purchase', ttProductParams({ order_id: String(orderId || pendingOrderKey) }));
+}
 
 function showSuccessOverlay(order) {
   successDetails.innerHTML =
@@ -625,6 +655,7 @@ async function sendPendingOrder(mode, extra = {}) {
     }
     if (instantOrderBtn) instantOrderBtn.disabled = false;
     fbTrack('Lead', { content_name: 'Violet Motion Order', value: 690, currency: 'UAH' }, { eventId: leadEventId });
+    trackTikTokPurchase(result.id);
     Analytics.track('order_success', { size: pendingOrder.size, mode });
     return { success: true, id: result.id, payload };
   }
@@ -634,7 +665,7 @@ async function sendPendingOrder(mode, extra = {}) {
   pendingManualOrderId = null;
   pendingOrderKey = '';
   fbTrack('Lead', { content_name: 'Violet Motion Order', value: 690, currency: 'UAH' }, { eventId: leadEventId });
-  ttTrack('Purchase', { content_type: 'product', content_ids: ['violet-motion-001'], content_name: 'Violet Motion Sneakers', value: 690, currency: 'UAH', quantity: 1 });
+  trackTikTokPurchase(result.id);
   Analytics.track('order_success', { size: pendingOrder.size, mode });
   resetOrderForm();
   pendingOrder = null;
@@ -810,7 +841,7 @@ document.getElementById('orderForm').addEventListener('submit', async e => {
   await ttIdentifyPhone(phone);
   updateMetaAdvancedMatching({ name, phone });
   const checkoutEventId = fbTrack('InitiateCheckout', { content_name: 'Violet Motion Sneakers', content_ids: ['violet-motion-001'], value: 690, currency: 'UAH', num_items: 1 });
-  ttTrack('InitiateCheckout', { content_type: 'product', content_ids: ['violet-motion-001'], content_name: 'Violet Motion Sneakers', value: 690, currency: 'UAH', quantity: 1 });
+  ttTrack('InitiateCheckout', ttProductParams());
   Analytics.track('form_submit', { size, viaTelegram: viaTg });
 
   orderSubmitting = false;
@@ -823,6 +854,7 @@ document.getElementById('orderForm').addEventListener('submit', async e => {
   pendingManualOrderId = null;
   instantOrderSent = false;
   pendingOrderKey = `order_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  tiktokPurchaseTracked = false;
   pendingOrder.meta = metaBrowserData(checkoutEventId);
   showSuccessOverlay(pendingOrder);
   sendPendingOrder('manual');
